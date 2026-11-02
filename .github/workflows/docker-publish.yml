@@ -1,8 +1,10 @@
-name: Build, Test and Publish Student Result Prediction
+name: Build Test and Publish Student Result Prediction
 
 on:
   push:
-    branches: ["main"]
+    branches:
+      - main
+
   workflow_dispatch:
 
 permissions:
@@ -14,22 +16,22 @@ env:
   IMAGE_NAME: student-result-prediction
 
 jobs:
+
   build-test-publish:
+
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: docker build -t $IMAGE_NAME:ci .
+        run: docker build -t student-result-prediction:ci .
 
       - name: Start test container
         run: |
-          docker run -d \
-            --name student-result-ci \
-            -p 5000:5000 \
-            $IMAGE_NAME:ci
+          docker run -d             --name student-result-ci             -p 5000:5000             student-result-prediction:ci
 
       - name: Test API health endpoint
         run: |
@@ -41,16 +43,13 @@ jobs:
             echo "Waiting for API..."
             sleep 3
           done
-          echo "Health check failed."
+
           docker logs student-result-ci
           exit 1
 
       - name: Test prediction endpoint
         run: |
-          curl --fail --silent \
-            -X POST http://localhost:5000/predict \
-            -H "Content-Type: application/json" \
-            --data @test_payload.json
+          curl --fail --silent --show-error             -X POST http://localhost:5000/predict             -H "Content-Type: application/json"             --data @test_payload.json
 
       - name: Remove test container
         if: always()
@@ -58,23 +57,20 @@ jobs:
 
       - name: Create lowercase GHCR image name
         run: |
-          IMAGE_ID="${REGISTRY}/${{ github.repository_owner }}/${IMAGE_NAME}"
+          IMAGE_ID="${REGISTRY}/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}"
           IMAGE_ID=$(echo "$IMAGE_ID" | tr '[:upper:]' '[:lower:]')
           echo "IMAGE_ID=$IMAGE_ID" >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | \
-          docker login $REGISTRY \
-            -u "${{ github.actor }}" \
-            --password-stdin
+          echo "${{ secrets.GITHUB_TOKEN }}" |           docker login ghcr.io             -u "${{ github.actor }}"             --password-stdin
 
       - name: Tag tested image
         run: |
-          docker tag $IMAGE_NAME:ci $IMAGE_ID:latest
-          docker tag $IMAGE_NAME:ci $IMAGE_ID:sha-${{ github.sha }}
+          docker tag student-result-prediction:ci "$IMAGE_ID:latest"
+          docker tag student-result-prediction:ci "$IMAGE_ID:sha-${GITHUB_SHA}"
 
       - name: Push tested image to GHCR
         run: |
-          docker push $IMAGE_ID:latest
-          docker push $IMAGE_ID:sha-${{ github.sha }}
+          docker push "$IMAGE_ID:latest"
+          docker push "$IMAGE_ID:sha-${GITHUB_SHA}"
